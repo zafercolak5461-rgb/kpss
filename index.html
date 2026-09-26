@@ -71,6 +71,7 @@
   .stat-card{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px;}
   .stat-card .label{font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em;}
   .stat-card .value{font-size:26px; font-weight:700; margin-top:6px;}
+  .stat-card .sub{font-size:11px; color:var(--muted); margin-top:4px;}
   .stat-card.good .value{color:var(--good);}
   .stat-card.bad .value{color:var(--bad);}
   .stat-card.accent .value{color:var(--accent);}
@@ -603,7 +604,16 @@ function renderHome(main){
   const totalQ = subjNames.reduce((s,n)=>s+subjects[n].length,0);
   const myHistory = historyFor(state.profile);
   const attempts = myHistory.length;
-  const bestNet = myHistory.reduce((m,h)=>Math.max(m,h.net), 0);
+  // "En iyi test" artık ham net değil, başarı yüzdesine (net/soru sayısı) göre seçiliyor;
+  // böylece 5 soruluk bir testten çıkan yüksek net, 120 soruluk bir denemeden çıkan daha
+  // düşük ama oransal olarak daha güçlü bir performansı gölgelemiyor.
+  let bestEntry = null, bestRate = -Infinity;
+  myHistory.forEach(h=>{
+    const total = h.total || (h.correct + h.wrong + h.blank) || 1;
+    const rate = h.net / total;
+    if(rate > bestRate){ bestRate = rate; bestEntry = h; }
+  });
+  const bestTotal = bestEntry ? (bestEntry.total || (bestEntry.correct + bestEntry.wrong + bestEntry.blank)) : 0;
   main.innerHTML = `
     <h2 class="page-title">Hoş geldin, ${esc(state.profile)}</h2>
     <p class="page-sub">KPSS çalışma paneline hoş geldin. Soldan bir ders seçip teste başlayabilir veya yeni sorular ekleyebilirsin.</p>
@@ -611,7 +621,11 @@ function renderHome(main){
       <div class="stat-card accent"><div class="label">Toplam Ders</div><div class="value">${subjNames.length}</div></div>
       <div class="stat-card accent"><div class="label">Toplam Soru</div><div class="value">${totalQ}</div></div>
       <div class="stat-card good"><div class="label">Çözülen Test</div><div class="value">${attempts}</div></div>
-      <div class="stat-card good"><div class="label">En Yüksek Net</div><div class="value">${bestNet.toFixed(2)}</div></div>
+      <div class="stat-card good">
+        <div class="label">En Başarılı Test</div>
+        <div class="value">${bestEntry ? bestEntry.net.toFixed(2) : '0.00'}</div>
+        <div class="sub">${bestEntry ? `${bestTotal} soruluk ${esc(bestEntry.subject)} testinde` : 'Henüz test çözülmedi'}</div>
+      </div>
     </div>
     <div class="panel">
       <h3>Dersler</h3>
@@ -633,15 +647,18 @@ function renderHome(main){
     ${myHistory.length ? `
     <div class="panel">
       <h3>Son Çözülen Testler</h3>
-      <table><thead><tr><th>Tarih</th><th>Ders</th><th>Doğru</th><th>Yanlış</th><th>Boş</th><th>Net</th></tr></thead><tbody>
-        ${myHistory.slice(-5).reverse().map(h=>`<tr>
+      <table><thead><tr><th>Tarih</th><th>Ders</th><th>Soru</th><th>Doğru</th><th>Yanlış</th><th>Boş</th><th>Net</th></tr></thead><tbody>
+        ${myHistory.slice(-5).reverse().map(h=>{
+          const total = h.total || (h.correct + h.wrong + h.blank);
+          return `<tr>
           <td>${new Date(h.date).toLocaleString('tr-TR')}</td>
           <td>${esc(h.subject)}</td>
+          <td>${total}</td>
           <td><span class="pill good">${h.correct}</span></td>
           <td><span class="pill bad">${h.wrong}</span></td>
           <td>${h.blank}</td>
           <td><b>${h.net.toFixed(2)}</b></td>
-        </tr>`).join('')}
+        </tr>`;}).join('')}
       </tbody></table>
     </div>` : ''}
   `;
@@ -1010,14 +1027,17 @@ function renderStats(main){
           points="${attempts.map((a,i)=>`${i*40+20},${64 - (a.net/maxNet)*56}`).join(' ')}" />
         ${attempts.map((a,i)=>`<circle cx="${i*40+20}" cy="${64 - (a.net/maxNet)*56}" r="3.5" fill="#7c5cff"/>`).join('')}
       </svg>
-      <table><thead><tr><th>Tarih</th><th>Doğru</th><th>Yanlış</th><th>Boş</th><th>Net</th></tr></thead><tbody>
-        ${attempts.slice().reverse().map(a=>`<tr>
+      <table><thead><tr><th>Tarih</th><th>Soru</th><th>Doğru</th><th>Yanlış</th><th>Boş</th><th>Net</th></tr></thead><tbody>
+        ${attempts.slice().reverse().map(a=>{
+          const total = a.total || (a.correct + a.wrong + a.blank);
+          return `<tr>
           <td>${new Date(a.date).toLocaleString('tr-TR')}</td>
+          <td>${total}</td>
           <td><span class="pill good">${a.correct}</span></td>
           <td><span class="pill bad">${a.wrong}</span></td>
           <td>${a.blank}</td>
           <td><b>${a.net.toFixed(2)}</b></td>
-        </tr>`).join('')}
+        </tr>`;}).join('')}
       </tbody></table>
     </div>`;
   });
